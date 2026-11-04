@@ -1,0 +1,10 @@
+services:
+  vietqr-core:
+    build: .
+    container_name: vietqr-core
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+    ports:
+      - "3011:8080"
