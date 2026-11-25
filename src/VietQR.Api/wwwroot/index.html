@@ -1956,7 +1956,7 @@ curl -X POST "https://vietqr.hoangtuan.net/api/v1/vietqr-core/deeplink/intents" 
     // Chỉ gửi số tiền nếu người dùng có nhập
     const amount = $('amount').value.trim();
     if (amount !== '') {
-        body.amount = Number(amount);
+        body.amount = amount;
     }
 
     // Chỉ gửi nội dung chuyển khoản nếu người dùng có nhập
