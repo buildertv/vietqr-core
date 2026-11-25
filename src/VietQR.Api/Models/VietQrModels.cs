@@ -26,14 +26,14 @@ public class VietQrGenerateRequest
     /// </summary>
     /// <example>50000</example>
     [JsonPropertyName("amount")]
-    public string Amount { get; set; } = string.Empty;
+    public string? Amount { get; set; }
 
     /// <summary>
     /// Nội dung thanh toán / chuyển khoản (tối đa 95 ký tự theo chuẩn EMVCo Tag 62.08).
     /// </summary>
     /// <example>Thanh toan don hang</example>
     [JsonPropertyName("description")]
-    public string Description { get; set; } = string.Empty;
+    public string? Description { get; set; }
 
     /// <summary>
     /// Tên chủ tài khoản người thụ hưởng (tùy chọn, hiển thị khi dùng mẫu 'print').
