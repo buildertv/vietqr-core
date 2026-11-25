@@ -349,11 +349,12 @@ public class QrCodesController : ControllerBase
         }
     }
 
-    private async Task<(string Payload, QrRenderOptions Options, string FormatStr, IActionResult? ErrorResult)> ValidateAndPrepareAsync(VietQrGenerateRequest req)
+    
+private async Task<(string Payload, QrRenderOptions Options, string FormatStr, IActionResult? ErrorResult)> ValidateAndPrepareAsync(VietQrGenerateRequest req)
 {
+    // 1. Kiểm tra tham số bắt buộc
     var missingParams = new List<string>();
 
-    // Chỉ bankBin và accountNo là bắt buộc
     if (string.IsNullOrWhiteSpace(req.BankBin))
         missingParams.Add("bankBin");
 
@@ -367,9 +368,7 @@ public class QrCodesController : ControllerBase
                 $"Thiếu tham số bắt buộc: {string.Join(", ", missingParams)}. Yêu cầu: bankBin, accountNo.")));
     }
 
-    // =========================
-    // 1. XỬ LÝ SỐ TIỀN (TÙY CHỌN)
-    // =========================
+    // 2. Xử lý số tiền (tùy chọn)
     long? val = null;
 
     if (!string.IsNullOrWhiteSpace(req.Amount))
@@ -389,9 +388,7 @@ public class QrCodesController : ControllerBase
         val = parsedAmount;
     }
 
-    // =========================
-    // 2. XỬ LÝ TEMPLATE
-    // =========================
+    // 3. Xử lý template
     var cleanTemplate = string.IsNullOrWhiteSpace(req.Template)
         ? "compact"
         : req.Template.Trim().ToLowerInvariant();
@@ -403,13 +400,8 @@ public class QrCodesController : ControllerBase
                 $"Template '{req.Template}' không hợp lệ. Chỉ hỗ trợ 'compact', 'qr_only' hoặc 'print'.")));
     }
 
-    // =========================
-    // 3. XỬ LÝ BANK BIN
-    // =========================
-    
+    // 4. Xử lý Bank BIN
     var cleanBin = req.BankBin.Trim();
-    var cleanAccountNo = req.AccountNo.Trim();
-    var cleanDescription = req.Description?.Trim() ?? string.Empty;
 
     if (cleanBin.Length != 6 || !cleanBin.All(c => c >= '0' && c <= '9'))
     {
@@ -418,9 +410,7 @@ public class QrCodesController : ControllerBase
                 "Bank BIN không hợp lệ - Phải gồm đúng 6 chữ số.")));
     }
 
-    // =========================
-    // 4. XỬ LÝ ACCOUNT NO
-    // =========================
+    // 5. Xử lý số tài khoản
     var cleanAccountNo = req.AccountNo.Trim();
 
     if (cleanAccountNo.Length > 25)
@@ -430,10 +420,8 @@ public class QrCodesController : ControllerBase
                 "Số tài khoản không hợp lệ - Tối đa 25 ký tự.")));
     }
 
-    // =========================
-    // 5. XỬ LÝ DESCRIPTION (TÙY CHỌN)
-    // =========================
-    
+    // 6. Xử lý nội dung chuyển khoản (tùy chọn)
+    var cleanDescription = req.Description?.Trim() ?? string.Empty;
 
     if (cleanDescription.Length > 95)
     {
@@ -442,9 +430,7 @@ public class QrCodesController : ControllerBase
                 "Nội dung chuyển khoản tối đa 95 ký tự.")));
     }
 
-    // =========================
-    // 6. TÌM THÔNG TIN NGÂN HÀNG
-    // =========================
+    // 7. Tìm thông tin ngân hàng
     var bankInfo = await bankCatalog.FindAsync(cleanBin);
 
     if (bankInfo == null)
@@ -454,9 +440,7 @@ public class QrCodesController : ControllerBase
                 "Không tìm thấy thông tin ngân hàng.")));
     }
 
-    // =========================
-    // 7. XỬ LÝ SERVICE TYPE
-    // =========================
+    // 8. Xử lý Service Type
     var resolvedServiceType = VietQrServiceType.Account;
 
     if (!string.IsNullOrWhiteSpace(req.ServiceType))
@@ -467,9 +451,7 @@ public class QrCodesController : ControllerBase
             resolvedServiceType = VietQrServiceType.Card;
     }
 
-    // =========================
-    // 8. XỬ LÝ ĐỊNH DẠNG
-    // =========================
+    // 9. Xử lý định dạng ảnh
     var cleanFormat = string.IsNullOrWhiteSpace(req.Format)
         ? "png"
         : req.Format.Trim().ToLowerInvariant();
@@ -481,49 +463,40 @@ public class QrCodesController : ControllerBase
         _ => QrImageFormat.Png
     };
 
-    // =========================
-    // 9. XỬ LÝ TÊN TÀI KHOẢN
-    // =========================
+    // 10. Xử lý tên tài khoản
     var merchantName = !string.IsNullOrWhiteSpace(req.AccountName)
         ? req.AccountName.Trim()
         : (!string.IsNullOrWhiteSpace(bankInfo.ShortName)
             ? bankInfo.ShortName
             : "VIETQR");
 
-    // =========================
-    // 10. TẠO NỘI DUNG VIETQR
-    // =========================
+    // 11. Tạo nội dung VietQR
     var qrBuilder = new VietQr()
-        .SetBeneficiaryOrganization(cleanBin, cleanAccountNo, resolvedServiceType);
+        .SetBeneficiaryOrganization(cleanBin, cleanAccountNo, resolvedServiceType)
+        .SetMerchantInfo(merchantName, null);
 
-    // Chỉ thêm số tiền nếu người dùng có nhập
     if (val.HasValue)
     {
         qrBuilder.SetTransactionAmount(val.Value.ToString());
     }
 
-    // Chỉ thêm nội dung chuyển khoản nếu người dùng có nhập
     if (!string.IsNullOrWhiteSpace(cleanDescription))
     {
-        qrBuilder.SetMerchantInfo(merchantName, null)
-                 .SetAdditionalData(purpose: cleanDescription, billNumber: req.BillNumber);
-    }
-    else
-    {
-        // Không có nội dung chuyển khoản
-        qrBuilder.SetMerchantInfo(merchantName, null);
+        qrBuilder.SetAdditionalData(
+            purpose: cleanDescription,
+            billNumber: req.BillNumber
+        );
     }
 
     var finalQrContent = qrBuilder.Build();
 
-    // =========================
-    // 11. CẤU HÌNH RENDER QR
-    // =========================
+    // 12. Cấu hình render QR
     var renderOptions = new QrRenderOptions
     {
         Template = cleanTemplate,
         Format = imageFormat,
         Quality = 80,
+
         Size = req.Size is >= 100 and <= 2000
             ? req.Size.Value
             : 500,
