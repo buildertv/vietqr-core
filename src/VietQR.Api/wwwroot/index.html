@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VietQR.Core — Tài liệu kỹ thuật &amp; Playground NAPAS247</title>
+  <title>Tạo mã QR chuyển khoản - hoangtuan.net</title>
   <link rel="icon" type="image/png" href="images/vietqr_icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -276,18 +276,18 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label for="amount" class="block text-xs font-medium text-slate-600 mb-1.5">
-                      Số tiền (VNĐ) <span class="text-rose-500">*</span>
+                      Số tiền (VNĐ)
                     </label>
-                    <input type="number" id="amount" value="50000" min="1" max="9999999999999" required
+                    <input type="number" id="amount"  min="1" max="9999999999999"
                            placeholder="50000" class="w-full border border-slate-300 bg-white rounded-xl px-3 py-2 text-sm transition">
-                    <span id="amount-formatted" class="text-xs text-slate-500 font-medium mt-1 inline-block">50.000 đ</span>
+                    <span id="amount-formatted" class="text-xs text-slate-500 font-medium mt-1 inline-block"></span>
                   </div>
                   <div>
                     <label for="description" class="block text-xs font-medium text-slate-600 mb-1.5">
-                      Nội dung chuyển khoản <span class="text-rose-500">*</span>
+                      Nội dung chuyển khoản
                     </label>
-                    <input type="text" id="description" value="cam on ban" maxlength="95" required
-                           placeholder="Tối đa 95 ký tự" class="w-full border border-slate-300 bg-white rounded-xl px-3 py-2 text-sm transition">
+                    <input type="text" id="description"  maxlength="95"
+                           placeholder="Viết không dấu, tối đa 95 ký tự" class="w-full border border-slate-300 bg-white rounded-xl px-3 py-2 text-sm transition">
                   </div>
                 </div>
 
@@ -1940,47 +1940,59 @@ curl -X POST "https://vietqr.hoangtuan.net/api/v1/vietqr-core/deeplink/intents" 
     }
 
     async function generateQR() {
-      const spinner = $('loading-spinner');
-      spinner.classList.remove('hidden');
-      spinner.classList.add('grid');
+    const spinner = $('loading-spinner');
+    spinner.classList.remove('hidden');
+    spinner.classList.add('grid');
 
-      const body = {
+    const body = {
         bankBin: $('bank-select').value,
         accountNo: $('account-no').value.trim(),
         accountName: $('account-name').value.trim() || undefined,
-        amount: $('amount').value.trim(),
-        description: $('description').value.trim(),
         template: document.querySelector('input[name="template"]:checked').value,
         format: $('format').value,
         serviceType: $('service-type').value,
-      };
-      if (customLogoDataUrl) body.customLogoBase64 = customLogoDataUrl;
-      currentExtension = body.format;
+    };
 
-      try {
-        const res = await fetch(API_BASE + '/api/v1/vietqr-core/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        const json = await res.json();
-        if (json.code === '00' && json.data) {
-          currentPayload = pick(json.data, 'QrCode') ?? '';
-          currentDataUrl = pick(json.data, 'QrDataURL') ?? '';
-          $('qr-preview-img').src = currentDataUrl;
-          $('payload-text').textContent = currentPayload;
-          $('payload-length').textContent = currentPayload ? currentPayload.length + ' ký tự' : '';
-        } else {
-          toast(json.desc || 'Không tạo được mã VietQR.', 'error');
-        }
-      } catch (err) {
-        handleFetchError(err, 'Lỗi gọi API tạo mã');
-      } finally {
-        spinner.classList.add('hidden');
-        spinner.classList.remove('grid');
-      }
+    // Chỉ gửi số tiền nếu người dùng có nhập
+    const amount = $('amount').value.trim();
+    if (amount !== '') {
+        body.amount = Number(amount);
     }
 
+    // Chỉ gửi nội dung chuyển khoản nếu người dùng có nhập
+    const description = $('description').value.trim();
+    if (description !== '') {
+        body.description = description;
+    }
+
+    if (customLogoDataUrl) body.customLogoBase64 = customLogoDataUrl;
+    currentExtension = body.format;
+
+    try {
+        const res = await fetch(API_BASE + '/api/v1/vietqr-core/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+
+        const json = await res.json();
+
+        if (json.code === '00' && json.data) {
+            currentPayload = pick(json.data, 'QrCode') ?? '';
+            currentDataUrl = pick(json.data, 'QrDataURL') ?? '';
+            $('qr-preview-img').src = currentDataUrl;
+            $('payload-text').textContent = currentPayload;
+            $('payload-length').textContent = currentPayload ? currentPayload.length + ' ký tự' : '';
+        } else {
+            toast(json.desc || 'Không tạo được mã VietQR.', 'error');
+        }
+    } catch (err) {
+        handleFetchError(err, 'Lỗi gọi API tạo mã');
+    } finally {
+        spinner.classList.add('hidden');
+        spinner.classList.remove('grid');
+    }
+}
     function downloadImage() {
       if (!currentDataUrl) return;
       const a = document.createElement('a');
