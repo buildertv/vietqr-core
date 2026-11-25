@@ -353,17 +353,23 @@ public class QrCodesController : ControllerBase
 {
     var missingParams = new List<string>();
 
-    if (string.IsNullOrWhiteSpace(req.BankBin)) missingParams.Add("bankBin");
-    if (string.IsNullOrWhiteSpace(req.AccountNo)) missingParams.Add("accountNo");
-    if (string.IsNullOrWhiteSpace(req.Description)) missingParams.Add("description");
+    // Chỉ bankBin và accountNo là bắt buộc
+    if (string.IsNullOrWhiteSpace(req.BankBin))
+        missingParams.Add("bankBin");
+
+    if (string.IsNullOrWhiteSpace(req.AccountNo))
+        missingParams.Add("accountNo");
 
     if (missingParams.Count > 0)
     {
-        return (string.Empty, null!, string.Empty, BadRequest(ApiResponse<object>.Error("01",
-            $"Thiếu tham số bắt buộc: {string.Join(", ", missingParams)}. Yêu cầu: bankBin, accountNo, description.")));
+        return (string.Empty, null!, string.Empty,
+            BadRequest(ApiResponse<object>.Error("01",
+                $"Thiếu tham số bắt buộc: {string.Join(", ", missingParams)}. Yêu cầu: bankBin, accountNo.")));
     }
 
-    // Amount là tùy chọn
+    // =========================
+    // 1. XỬ LÝ SỐ TIỀN (TÙY CHỌN)
+    // =========================
     long? val = null;
 
     if (!string.IsNullOrWhiteSpace(req.Amount))
@@ -375,53 +381,79 @@ public class QrCodesController : ControllerBase
             || !long.TryParse(trimmedAmount, out var parsedAmount)
             || parsedAmount <= 0)
         {
-            return (string.Empty, null!, string.Empty, BadRequest(ApiResponse<object>.Error("02",
-                "Invalid amount - Trường chỉ nhập số, tối đa 13 kí tự")));
+            return (string.Empty, null!, string.Empty,
+                BadRequest(ApiResponse<object>.Error("02",
+                    "Số tiền không hợp lệ - Chỉ nhập số nguyên dương, tối đa 13 chữ số.")));
         }
 
         val = parsedAmount;
     }
 
-    var cleanTemplate = string.IsNullOrWhiteSpace(req.Template) ? "compact" : req.Template.Trim().ToLowerInvariant();
+    // =========================
+    // 2. XỬ LÝ TEMPLATE
+    // =========================
+    var cleanTemplate = string.IsNullOrWhiteSpace(req.Template)
+        ? "compact"
+        : req.Template.Trim().ToLowerInvariant();
 
     if (cleanTemplate is not ("compact" or "qr_only" or "print"))
     {
-        return (string.Empty, null!, string.Empty, BadRequest(ApiResponse<object>.Error("05",
-            $"Template '{req.Template}' không hợp lệ. Chỉ hỗ trợ 3 mẫu: 'compact', 'qr_only' hoặc 'print'.")));
+        return (string.Empty, null!, string.Empty,
+            BadRequest(ApiResponse<object>.Error("05",
+                $"Template '{req.Template}' không hợp lệ. Chỉ hỗ trợ 'compact', 'qr_only' hoặc 'print'.")));
     }
 
+    // =========================
+    // 3. XỬ LÝ BANK BIN
+    // =========================
     var cleanBin = req.BankBin.Trim();
 
     if (cleanBin.Length != 6 || !cleanBin.All(c => c >= '0' && c <= '9'))
     {
-        return (string.Empty, null!, string.Empty, BadRequest(ApiResponse<object>.Error("03",
-            "Invalid bankBin - Phải gồm đúng 6 chữ số")));
+        return (string.Empty, null!, string.Empty,
+            BadRequest(ApiResponse<object>.Error("03",
+                "Bank BIN không hợp lệ - Phải gồm đúng 6 chữ số.")));
     }
 
+    // =========================
+    // 4. XỬ LÝ ACCOUNT NO
+    // =========================
     var cleanAccountNo = req.AccountNo.Trim();
 
     if (cleanAccountNo.Length > 25)
     {
-        return (string.Empty, null!, string.Empty, BadRequest(ApiResponse<object>.Error("04",
-            "Invalid accountNo - Tối đa 25 ký tự")));
+        return (string.Empty, null!, string.Empty,
+            BadRequest(ApiResponse<object>.Error("04",
+                "Số tài khoản không hợp lệ - Tối đa 25 ký tự.")));
     }
 
-    var cleanDescription = req.Description.Trim();
+    // =========================
+    // 5. XỬ LÝ DESCRIPTION (TÙY CHỌN)
+    // =========================
+    var cleanDescription = req.Description?.Trim() ?? string.Empty;
 
     if (cleanDescription.Length > 95)
     {
-        return (string.Empty, null!, string.Empty, BadRequest(ApiResponse<object>.Error("06",
-            "Invalid description - Tối đa 95 ký tự")));
+        return (string.Empty, null!, string.Empty,
+            BadRequest(ApiResponse<object>.Error("06",
+                "Nội dung chuyển khoản tối đa 95 ký tự.")));
     }
 
+    // =========================
+    // 6. TÌM THÔNG TIN NGÂN HÀNG
+    // =========================
     var bankInfo = await bankCatalog.FindAsync(cleanBin);
 
     if (bankInfo == null)
     {
-        return (string.Empty, null!, string.Empty, BadRequest(ApiResponse<object>.Error("07",
-            "Không tìm thấy thông tin ngân hàng")));
+        return (string.Empty, null!, string.Empty,
+            BadRequest(ApiResponse<object>.Error("07",
+                "Không tìm thấy thông tin ngân hàng.")));
     }
 
+    // =========================
+    // 7. XỬ LÝ SERVICE TYPE
+    // =========================
     var resolvedServiceType = VietQrServiceType.Account;
 
     if (!string.IsNullOrWhiteSpace(req.ServiceType))
@@ -432,7 +464,12 @@ public class QrCodesController : ControllerBase
             resolvedServiceType = VietQrServiceType.Card;
     }
 
-    var cleanFormat = string.IsNullOrWhiteSpace(req.Format) ? "png" : req.Format.Trim().ToLowerInvariant();
+    // =========================
+    // 8. XỬ LÝ ĐỊNH DẠNG
+    // =========================
+    var cleanFormat = string.IsNullOrWhiteSpace(req.Format)
+        ? "png"
+        : req.Format.Trim().ToLowerInvariant();
 
     var imageFormat = cleanFormat switch
     {
@@ -441,33 +478,59 @@ public class QrCodesController : ControllerBase
         _ => QrImageFormat.Png
     };
 
+    // =========================
+    // 9. XỬ LÝ TÊN TÀI KHOẢN
+    // =========================
     var merchantName = !string.IsNullOrWhiteSpace(req.AccountName)
         ? req.AccountName.Trim()
-        : (!string.IsNullOrWhiteSpace(bankInfo.ShortName) ? bankInfo.ShortName : "VIETQR");
+        : (!string.IsNullOrWhiteSpace(bankInfo.ShortName)
+            ? bankInfo.ShortName
+            : "VIETQR");
 
-    // Tạo QR: chỉ thêm số tiền khi người dùng có truyền amount
+    // =========================
+    // 10. TẠO NỘI DUNG VIETQR
+    // =========================
     var qrBuilder = new VietQr()
         .SetBeneficiaryOrganization(cleanBin, cleanAccountNo, resolvedServiceType);
 
+    // Chỉ thêm số tiền nếu người dùng có nhập
     if (val.HasValue)
     {
         qrBuilder.SetTransactionAmount(val.Value.ToString());
     }
 
-    qrBuilder
-        .SetMerchantInfo(merchantName, null)
-        .SetAdditionalData(purpose: cleanDescription, billNumber: req.BillNumber);
+    // Chỉ thêm nội dung chuyển khoản nếu người dùng có nhập
+    if (!string.IsNullOrWhiteSpace(cleanDescription))
+    {
+        qrBuilder.SetMerchantInfo(merchantName, null)
+                 .SetAdditionalData(purpose: cleanDescription, billNumber: req.BillNumber);
+    }
+    else
+    {
+        // Không có nội dung chuyển khoản
+        qrBuilder.SetMerchantInfo(merchantName, null);
+    }
 
     var finalQrContent = qrBuilder.Build();
 
+    // =========================
+    // 11. CẤU HÌNH RENDER QR
+    // =========================
     var renderOptions = new QrRenderOptions
     {
         Template = cleanTemplate,
         Format = imageFormat,
         Quality = 80,
-        Size = req.Size is >= 100 and <= 2000 ? req.Size.Value : 500,
+        Size = req.Size is >= 100 and <= 2000
+            ? req.Size.Value
+            : 500,
+
         CustomCenterLogoBase64 = req.CustomLogoBase64,
-        CenterLogoRatio = req.CenterLogoRatio is >= 0.05f and <= 0.35f ? req.CenterLogoRatio.Value : 0.20f,
+
+        CenterLogoRatio = req.CenterLogoRatio is >= 0.05f and <= 0.35f
+            ? req.CenterLogoRatio.Value
+            : 0.20f,
+
         BankBin = cleanBin,
         AccountNo = cleanAccountNo,
         AccountName = req.AccountName?.Trim(),
