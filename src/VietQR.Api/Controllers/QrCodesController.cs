@@ -406,7 +406,7 @@ public class QrCodesController : ControllerBase
     // =========================
     // 3. XỬ LÝ BANK BIN
     // =========================
-    var cleanBin = req.BankBin.Trim();
+    var cleanDescription = req.Description?.Trim() ?? string.Empty;
 
     if (cleanBin.Length != 6 || !cleanBin.All(c => c >= '0' && c <= '9'))
     {
